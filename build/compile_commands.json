@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/home/Aerith/Documents/code/m_projects/json_serializer/build",
+  "command": "/usr/bin/c++  -I/usr/include/python3.12 -g -std=gnu++14 -Wall -Wextra -Werror=return-type -o CMakeFiles/main.dir/main.cpp.o -c /home/Aerith/Documents/code/m_projects/json_serializer/main.cpp",
+  "file": "/home/Aerith/Documents/code/m_projects/json_serializer/main.cpp",
+  "output": "CMakeFiles/main.dir/main.cpp.o"
+}
+]
