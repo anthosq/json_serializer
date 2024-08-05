@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <json/json.h>
+#include <type_traits>
 
 #define REFLECT_PP_FOREACH_1(f, _1) f(_1)
 #define REFLECT_PP_FOREACH_2(f, _1, _2) f(_1) f(_2)
@@ -20,6 +21,11 @@
 
 template <class T>
 struct reflect_trait {
+    static constexpr bool has_members() {
+        return requires (T t) {
+            t.for_each_members([] (const char *, auto &) {});
+        };
+    } 
     template <class Func>
     static constexpr void for_each_members(T &self, Func &&func) {
         self.for_each_members(std::forward<Func>(func));
@@ -35,6 +41,7 @@ struct reflect_trait<Type> { \
 #define REFLECT_TYPE_TEMPLATED_BEGIN(Type, ...) \
 template <__VA_ARGS__> \
 struct reflect_trait<REFLECT_EXPAND(REFLECT_EXPAND Type)> { \
+    static constexpr bool has_members() { return true; } \
     template <class Func> \
     static constexpr void for_each_members(REFLECT_EXPAND(REFLECT_EXPAND Type) &self, Func &&func) {
 
@@ -64,35 +71,97 @@ constexpr void for_each_members(Func &&func) { \
     REFLECT_PP_FOREACH(REFLECT_PER_MEMBER, __VA_ARGS__) \
 }
 
-
-template <class T>
-std::string serializer(T &obj) {
-    Json::Value root;
-    reflect_trait<T>::for_each_members(obj, [&] (const char *key, auto &value) {
-        root[key] = value;
-    });
-    return root.toStyledString();
+std::string toString(Json::Value root) {
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = " ";
+    std::unique_ptr<Json::StreamWriter> writer(builder.newStreamWriter());
+    std::ostringstream os;
+    writer->write(root, &os);
+    return os.str();
 }
 
-template <class T>
+// template <class T>
+// std::string serializer(T &obj) {
+//     Json::Value root;
+//     reflect_trait<T>::for_each_members(obj, [&] (const char *key, auto &value) {
+//         root[key] = value;
+//     });
+//     return root.toStyledString();
+// }
+
+Json::Value fromString(std::string json) {
+    Json::Value root;
+    Json::Reader reader;
+    reader.parse(json, root);
+    return root;
+}
+
+template <class T> requires (!reflect_trait<T>::has_members())
+Json::Value serializer(T &obj) {
+    return obj;
+}
+
+template <class T> requires (reflect_trait<T>::has_members())
+Json::Value serializer(T &obj) {
+    Json::Value root;
+    reflect_trait<T>::for_each_members(obj, [&] (const char *key, auto &value) {
+        root[key] = serializer(value);
+    });
+    return root;
+}
+
+template <class T> requires (!reflect_trait<T>::has_members())
+T deserialize(Json::Value root) {
+    return root.as<T>();
+};
+
+template <class T> requires (reflect_trait<T>::has_members())
+T deserialize(Json::Value root) {
+    T obj;
+    reflect_trait<T>::for_each_members(obj, [&] (const char *key, auto &value) {
+        value = deserialize<std::decay_t<decltype(value)>>(root[key]);
+    });
+    return obj;
+}
+
+struct Components {
+    float m_value;
+    REFLECT(m_value);
+};
+
 struct GObject {
     std::string m_name;
     std::string m_definition_url;
     int m_id;
-    T m_components;
+    Components m_components;
+    REFLECT(m_name, m_definition_url, m_id, m_components);
 };
 
 
-REFLECT_TYPE_TEMPLATED(((GObject<T>), class T), m_name, m_definition_url, m_id, m_components);
+// REFLECT_TYPE_TEMPLATED(((GObject<T>), class T), m_name, m_definition_url, m_id, m_components);
 
 int main() {
-    GObject<float> m_go = {
+    GObject m_go = {
         .m_name = "TestObj",
         .m_definition_url = "Testurl",
         .m_id = 1,
-        .m_components = 1.0f,
+        .m_components = {
+            .m_value = 1.5f,
+        }
     };
-    std::string bin = serializer(m_go);
+    Components test = {
+        .m_value = 1.7f,
+    };
+    std::string bin = toString(serializer(m_go));
+    std::string bin2 = toString(serializer(test));
     std::cout << bin << '\n';
+    std::cout << bin2 << '\n';
+    auto GoDes = deserialize<GObject>(fromString(bin));
+    auto ComDes = deserialize<Components>(fromString(bin2));
+    std::cout << GoDes.m_name << '\n';
+    std::cout << GoDes.m_definition_url << '\n';
+    std::cout << GoDes.m_id << '\n';
+    std::cout << GoDes.m_components.m_value << '\n';
+    std::cout << ComDes.m_value << '\n';
     return 0;
 }

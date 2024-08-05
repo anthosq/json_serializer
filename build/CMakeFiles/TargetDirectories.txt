@@ -1,0 +1,3 @@
+/home/Aerith/Documents/code/m_projects/json_serializer/build/CMakeFiles/main.dir
+/home/Aerith/Documents/code/m_projects/json_serializer/build/CMakeFiles/edit_cache.dir
+/home/Aerith/Documents/code/m_projects/json_serializer/build/CMakeFiles/rebuild_cache.dir
