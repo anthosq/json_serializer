@@ -27,48 +27,71 @@ struct reflect_trait {
         };
     } 
     template <class Func>
-    static constexpr void for_each_members(T &self, Func &&func) {
-        self.for_each_members(std::forward<Func>(func));
+    static constexpr void for_each_members(T const &cself, Func &&func) {
+        const_cast<T &>(cself).for_each_members(std::forward<Func>(func));
+    }
+
+    template <class Func>
+    static constexpr void for_each_members_ptrs(Func &&func) {
+        T::template for_each_members_ptrs<T>(std::forward<Func>(func));
     }
 };
-
-#define REFLECT_TYPE_BEGIN(Type) \
-template <> \
-struct reflect_trait<Type> { \
-    template <class Func> \
-    static constexpr void for_each_members(Type &self, Func &&func) {
-
-#define REFLECT_TYPE_TEMPLATED_BEGIN(Type, ...) \
-template <__VA_ARGS__> \
-struct reflect_trait<REFLECT_EXPAND(REFLECT_EXPAND Type)> { \
-    static constexpr bool has_members() { return true; } \
-    template <class Func> \
-    static constexpr void for_each_members(REFLECT_EXPAND(REFLECT_EXPAND Type) &self, Func &&func) {
 
 #define REFLECT_TYPE_PER_MEMBER(x) \
     func(#x, self.x);
 
-#define REFLECT_END() \
+#define REFLECT_TYPE_PER_MEMBER_PTR(x) \
+    func(#x, &This::x);
+
+
+#define REFLECT_TYPE(Type, ...) \
+template <> \
+struct reflect_trait<Type> { \
+    using This = Type; \
+    static constexpr bool has_members() { return true; } \
+    template <class Func> \
+    static constexpr void for_each_members_ptrs(Func &&func) { \
+        REFLECT_PP_FOREACH(REFLECT_TYPE_PER_MEMBER_PTR, __VA_ARGS__) \
     } \
 };
 
-#define REFLECT_TYPE(Type, ...) \
-REFLECT_TYPE_BEGIN(Type) \
-REFLECT_PP_FOREACH(REFLECT_TYPE_PER_MEMBER, __VA_ARGS__) \
-REFLECT_END();
-
 #define REFLECT_TYPE_TEMPLATED(Type, ...) \
-REFLECT_EXPAND(REFLECT_TYPE_TEMPLATED_BEGIN Type) \
-REFLECT_PP_FOREACH(REFLECT_TYPE_PER_MEMBER, __VA_ARGS__) \
-REFLECT_END();
+template <__VA_ARGS__> \
+struct reflect_trait<REFLECT_EXPAND(REFLECT_EXPAND Type)> { \
+    using This = REFLECT_EXPAND(REFLECT_EXPAND Type); \
+    static constexpr bool has_members() { return true; }; \
+    template <class Func> \
+    static constexpr void for_each_members(This const &cself, Func &&func) { \
+        Type &self = const_cast<Type &>(cself); \
+        REFLECT_PP_FOREACH(REFLECT_TYPE_PER_MEMBER, __VA_ARGS__) \
+    } \
+    template <class Func> \
+    static constexpr void for_each_members_ptrs(Func &&func) { \
+        REFLECT_PP_FOREACH(REFLECT_TYPE_PER_MEMBER_PTR, __VA_ARGS__) \
+    } \
+};
+
 
 #define REFLECT_PER_MEMBER(x) \
     func(#x, x);
+
+#define REFLECT_PER_MEMBER_PTR(x) \
+    func(#x, &This::x);
 
 #define REFLECT(...) \
 template <class Func> \
 constexpr void for_each_members(Func &&func) { \
     REFLECT_PP_FOREACH(REFLECT_PER_MEMBER, __VA_ARGS__) \
+} \
+template <class This, class Func> \
+static constexpr void for_each_members_ptrs(Func &&func) { \
+    REFLECT_PP_FOREACH(REFLECT_PER_MEMBER_PTR, __VA_ARGS__) \
+}
+
+#define REFLECT_FUNC(...) \
+    template <class This, class Func> \
+    static constexpr void for_each_members_func_ptrs(Func &&func) { \
+        REFLECT_PP_FOREACH(REFLECT_PER_MEMBER_PTR, __VA_ARGS__) \
 }
 
 std::string toString(Json::Value root) {
@@ -89,7 +112,7 @@ std::string toString(Json::Value root) {
 //     return root.toStyledString();
 // }
 
-Json::Value fromString(std::string json) {
+Json::Value fromString(std::string const &json) {
     Json::Value root;
     Json::Reader reader;
     reader.parse(json, root);
@@ -97,12 +120,12 @@ Json::Value fromString(std::string json) {
 }
 
 template <class T> requires (!reflect_trait<T>::has_members())
-Json::Value serializer(T &obj) {
+Json::Value serializer(T const &obj) {
     return obj;
 }
 
 template <class T> requires (reflect_trait<T>::has_members())
-Json::Value serializer(T &obj) {
+Json::Value serializer(T const &obj) {
     Json::Value root;
     reflect_trait<T>::for_each_members(obj, [&] (const char *key, auto &value) {
         root[key] = serializer(value);
@@ -111,12 +134,12 @@ Json::Value serializer(T &obj) {
 }
 
 template <class T> requires (!reflect_trait<T>::has_members())
-T deserialize(Json::Value root) {
+T deserialize(Json::Value const &root) {
     return root.as<T>();
 };
 
 template <class T> requires (reflect_trait<T>::has_members())
-T deserialize(Json::Value root) {
+T deserialize(Json::Value const &root) {
     T obj;
     reflect_trait<T>::for_each_members(obj, [&] (const char *key, auto &value) {
         value = deserialize<std::decay_t<decltype(value)>>(root[key]);
@@ -134,7 +157,11 @@ struct GObject {
     std::string m_definition_url;
     int m_id;
     Components m_components;
+    int getid() {
+        return m_id;
+    }
     REFLECT(m_name, m_definition_url, m_id, m_components);
+    REFLECT_FUNC(getid);
 };
 
 
