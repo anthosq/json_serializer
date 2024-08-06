@@ -2,7 +2,6 @@
 #include <string>
 #include <json/json.h>
 #include <type_traits>
-#include <pybind11/pybind11.h>
 
 #define REFLECT_PP_FOREACH_1(f, _1) f(_1)
 #define REFLECT_PP_FOREACH_2(f, _1, _2) f(_1) f(_2)
@@ -180,7 +179,6 @@ int main() {
     Components test = {
         .m_value = 1.7f,
     };
-    auto a = pybind::bind<GObject>();
     std::string bin = toString(serializer(m_go));
     std::string bin2 = toString(serializer(test));
     std::cout << bin << '\n';
